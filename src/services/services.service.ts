@@ -1,26 +1,68 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
+import { Repository } from 'typeorm';
+import { ServiceEntity } from './entities/service.entity';
+import { InjectRepository } from '@nestjs/typeorm';
+import { DoctorEntity } from 'src/doctors/entities/doctor.entity';
 
 @Injectable()
 export class ServicesService {
-  create(createServiceDto: CreateServiceDto) {
-    return 'This action adds a new service';
+  constructor(
+    @InjectRepository(ServiceEntity)
+    private readonly serviceRepository: Repository<ServiceEntity>,
+
+    @InjectRepository(DoctorEntity)
+    private readonly doctorRepository: Repository<DoctorEntity>,
+  ) {}
+
+  async create(createServiceDto: CreateServiceDto): Promise<ServiceEntity> {
+    const doctor = await this.doctorRepository.findOne({
+      where: { id: createServiceDto.doctorId },
+    });
+
+    if (!doctor) {
+      throw new NotFoundException('Doctor not found');
+    }
+
+    const service = this.serviceRepository.create({
+      ...createServiceDto,
+      doctor,
+    });
+
+    return await this.serviceRepository.save(service);
   }
 
-  findAll() {
-    return `This action returns all services`;
+  async findAll(): Promise<ServiceEntity[]> {
+    return this.serviceRepository.find({
+      relations: ['doctor'],
+    });
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} service`;
+  async findOne(id: string): Promise<ServiceEntity | null> {
+    const service = await this.serviceRepository.findOne({ where: { id } });
+    if(!service) throw new NotFoundException('Service id not found');
+    return service;
   }
 
-  update(id: number, updateServiceDto: UpdateServiceDto) {
-    return `This action updates a #${id} service`;
-  }
+  async update(id: string, updateServiceDto: UpdateServiceDto): Promise<ServiceEntity | null> {
+    const service = await this.serviceRepository.findOne({ where: { id } });
 
-  remove(id: number) {
-    return `This action removes a #${id} service`;
+    if(!service) {
+      throw new NotFoundException('Service id not found')
+    }
+
+    await this.serviceRepository.update(id, updateServiceDto);
+
+    return await this.findOne(id);
+  }
+  
+  async remove(id: string) {
+    const service = await this.serviceRepository.findOne({ where: { id } });
+    if(!service) throw new NotFoundException('Service id not found');
+    await this.serviceRepository.delete(id);
+    return {
+      message: 'Service deleted successfully'
+    }
   }
 }
